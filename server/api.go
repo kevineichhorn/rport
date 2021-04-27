@@ -1,9 +1,12 @@
 package chserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
+	"github.com/cloudradar-monitoring/rport/server/api/users"
 	"io"
 	"net"
 	"net/http"
@@ -123,6 +126,7 @@ func (al *APIListener) initRouter() {
 	sub.HandleFunc("/me", al.handleGetMe).Methods(http.MethodGet)
 	sub.HandleFunc("/me/ip", al.handleGetIP).Methods(http.MethodGet)
 	sub.HandleFunc("/clients", al.handleGetClients).Methods(http.MethodGet)
+	sub.HandleFunc("/users", al.handleGetUsers).Methods(http.MethodGet)
 	sub.HandleFunc("/clients/{client_id}/tunnels", al.handlePutClientTunnel).Methods(http.MethodPut)
 	sub.HandleFunc("/clients/{client_id}/tunnels/{tunnel_id}", al.handleDeleteClientTunnel).Methods(http.MethodDelete)
 	sub.HandleFunc("/clients/{client_id}/commands", al.handlePostCommand).Methods(http.MethodPost)
@@ -404,6 +408,33 @@ func (al *APIListener) handleGetClients(w http.ResponseWriter, req *http.Request
 
 	clientsPayload := convertToClientsPayload(clients)
 	al.writeJSONResponse(w, http.StatusOK, api.NewSuccessPayload(clientsPayload))
+}
+
+func (al *APIListener) handleGetUsers(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	status, err := al.validateGroupAccess(ctx, users.Administrators)
+	if err != nil {
+		al.jsonErrorResponse(w, status, err)
+		return
+	}
+
+	usrs, err := al.usersService.GetAll(ctx)
+	if err != nil {
+		if apiErr, ok := err.(errors2.APIError); ok {
+			al.jsonErrorResponse(w, apiErr.Code, apiErr)
+			return
+		}
+
+		al.jsonErrorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonEncoder := json.NewEncoder(w)
+	err = jsonEncoder.Encode(usrs)
+	if err != nil {
+		al.jsonErrorResponse(w, http.StatusInternalServerError, err)
+		return
+	}
 }
 
 type ClientPayload struct {
@@ -1629,4 +1660,28 @@ func (al *APIListener) handleDeleteClientGroup(w http.ResponseWriter, req *http.
 
 	w.WriteHeader(http.StatusNoContent)
 	al.Debugf("Client Group [id=%q] deleted.", id)
+}
+
+func (al *APIListener) validateGroupAccess(ctx context.Context, group string) (statusCode int, err error) {
+	curUsername := api.GetUser(ctx, al.Logger)
+	if curUsername == "" {
+		return http.StatusUnauthorized, errors.New("unauthorized access")
+	}
+
+	curUser, err := al.userSrv.GetByUsername(curUsername)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	if curUser == nil {
+		return http.StatusUnauthorized, errors.New("unauthorized access")
+	}
+
+	for _, g := range curUser.Groups {
+		if g == group {
+			return 0, nil
+		}
+	}
+
+	return http.StatusForbidden, errors.New("current user has not enough rights to access this resource")
 }

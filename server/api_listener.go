@@ -43,7 +43,8 @@ type APIListener struct {
 	bannedUsers       *security.BanList
 	bannedIPs         *security.MaxBadAttemptsBanList
 
-	testDone chan bool // is used only in tests to be able to wait until async task is done
+	testDone     chan bool // is used only in tests to be able to wait until async task is done
+	usersService *users.APIService
 }
 
 type UserService interface {
@@ -57,24 +58,29 @@ func NewAPIListener(
 	config := server.config
 
 	var userService UserService
+	var usersProviderType users.ProviderType
+	var userDB *users.UserDatabase
 	if config.API.AuthFile != "" {
 		authUsers, err := users.GetUsersFromFile(config.API.AuthFile)
 		if err != nil {
 			return nil, err
 		}
 		userService = users.NewUserCache(authUsers)
+		usersProviderType = users.ProviderFromFile
 	} else if config.API.Auth != "" {
 		authUser, err := parseHTTPAuthStr(config.API.Auth)
 		if err != nil {
 			return nil, err
 		}
 		userService = users.NewUserCache([]*users.User{authUser})
+		usersProviderType = users.ProviderFromStaticPassword
 	} else if config.API.AuthUserTable != "" {
 		userDB, err := users.NewUserDatabase(server.db, config.API.AuthUserTable, config.API.AuthGroupTable)
 		if err != nil {
 			return nil, err
 		}
 		userService = userDB
+		usersProviderType = users.ProviderFromDB
 	}
 
 	if config.Server.CheckPortTimeout > DefaultMaxCheckPortTimeout {
@@ -90,6 +96,12 @@ func NewAPIListener(
 		requestLogOptions: config.InitRequestLogOptions(),
 		userSrv:           userService,
 		bannedUsers:       security.NewBanList(time.Duration(config.API.UserLoginWait) * time.Second),
+		usersService: &users.APIService{
+			ProviderType: usersProviderType,
+			FilePath:     config.API.AuthFile,
+			AuthPath:     config.API.Auth,
+			DB:           userDB,
+		},
 	}
 
 	if config.API.MaxFailedLogin > 0 && config.API.BanTime > 0 {

@@ -53,3 +53,16 @@ func (d *UserDatabase) GetByUsername(username string) (*User, error) {
 
 	return user, nil
 }
+
+func (d *UserDatabase) GetAll() ([]*User, error) {
+	usrs := []*User{}
+	err := d.db.Get(usrs, fmt.Sprintf("SELECT * FROM `%s`", d.usersTableName))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return usrs, nil
+}
