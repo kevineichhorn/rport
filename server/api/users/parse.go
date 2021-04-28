@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -12,24 +13,38 @@ import (
 
 const htpasswdBcryptPrefix = "$2y$"
 
+type FileManager struct {
+	FileName string
+}
+
 // GetUsersFromFile returns users from a given file.
-func GetUsersFromFile(fileName string) ([]*User, error) {
+func (fm *FileManager) ReadUsersFromFile() ([]*User, error) {
 	log.Println("Start to get API users from file.")
 
-	file, err := os.Open(fileName)
+	file, err := os.Open(fm.FileName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open users file: %v", err)
 	}
-	log.Printf("API users file %s opened. Parsing...", fileName)
+	log.Printf("API users file %s opened. Parsing...", fm.FileName)
 	defer file.Close()
 
 	users, err := parseUsers(file)
 	if err != nil {
 		return users, err
 	}
-	log.Printf("API users file %s is parsed successfully", fileName)
+	log.Printf("API users file %s is parsed successfully", fm.FileName)
 
 	return users, nil
+}
+
+// SaveUsersToFile writes users to a file in json format
+func (fm *FileManager) SaveUsersToFile(usrs []*User) error {
+	file, err := json.MarshalIndent(usrs, "", " ")
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(fm.FileName, file, 0644)
 }
 
 func parseUsers(r io.Reader) ([]*User, error) {

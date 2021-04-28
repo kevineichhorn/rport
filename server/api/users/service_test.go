@@ -9,12 +9,60 @@ import (
 )
 
 type DBProviderMock struct {
-	UsersToGive []*User
-	ErrorToGive error
+	UsersToGive   []*User
+	UsersToAdd    []*User
+	UsersToUpdate []*User
+	ErrorToGive   error
 }
 
 func (dpm *DBProviderMock) GetAll() ([]*User, error) {
 	return dpm.UsersToGive, dpm.ErrorToGive
+}
+
+func (dpm *DBProviderMock) GetByUsername(username string) (*User, error) {
+	var usr *User
+	for i := range dpm.UsersToGive {
+		if dpm.UsersToGive[i].Username == username {
+			usr = dpm.UsersToGive[i]
+		}
+	}
+
+	return usr, dpm.ErrorToGive
+}
+
+func (dpm *DBProviderMock) Add(usr *User) error {
+	if dpm.UsersToAdd == nil {
+		dpm.UsersToAdd = []*User{}
+	}
+
+	dpm.UsersToAdd = append(dpm.UsersToAdd, usr)
+
+	return dpm.ErrorToGive
+}
+
+func (dpm *DBProviderMock) Update(usr *User, usernameToUpdate string) error {
+	if dpm.UsersToUpdate == nil {
+		dpm.UsersToUpdate = []*User{}
+	}
+
+	dpm.UsersToUpdate = append(dpm.UsersToUpdate, usr)
+
+	return dpm.ErrorToGive
+}
+
+type FileManagerMock struct {
+	UsersToRead  []*User
+	WrittenUsers []*User
+	ErrorToGive  error
+}
+
+func (fmm *FileManagerMock) ReadUsersFromFile() ([]*User, error) {
+	return fmm.UsersToRead, fmm.ErrorToGive
+}
+
+func (fmm *FileManagerMock) SaveUsersToFile(users []*User) error {
+	fmm.WrittenUsers = users
+	return fmm.ErrorToGive
 }
 
 func TestGetUsersFromDB(t *testing.T) {
@@ -31,7 +79,7 @@ func TestGetUsersFromDB(t *testing.T) {
 
 	service := APIService{
 		ProviderType: ProviderFromDB,
-		DB: db,
+		DB:           db,
 	}
 
 	actualUsers, err := service.GetAll()
@@ -46,7 +94,7 @@ func TestGetUsersFromDB(t *testing.T) {
 
 	service = APIService{
 		ProviderType: ProviderFromDB,
-		DB: db,
+		DB:           db,
 	}
 
 	_, err = service.GetAll()
@@ -64,8 +112,8 @@ func TestGetUsersFromFile(t *testing.T) {
 
 	service := APIService{
 		ProviderType: ProviderFromFile,
-		FileProvider: func() ([]*User, error) {
-			return givenUsers, nil
+		FileProvider: &FileManagerMock{
+			UsersToRead: givenUsers,
 		},
 	}
 
@@ -76,8 +124,8 @@ func TestGetUsersFromFile(t *testing.T) {
 
 	service = APIService{
 		ProviderType: ProviderFromFile,
-		FileProvider: func() ([]*User, error) {
-			return givenUsers, errors.New("some file error")
+		FileProvider: &FileManagerMock{
+			ErrorToGive: errors.New("some file error"),
 		},
 	}
 

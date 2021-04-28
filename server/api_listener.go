@@ -61,8 +61,10 @@ func NewAPIListener(
 	var usersProviderType users.ProviderType
 	var userDB *users.UserDatabase
 	var err error
+	usersFromFileProvider := &users.FileManager{}
 	if config.API.AuthFile != "" {
-		authUsers, e := users.GetUsersFromFile(config.API.AuthFile)
+		usersFromFileProvider.FileName = config.API.AuthFile
+		authUsers, e := usersFromFileProvider.ReadUsersFromFile()
 		if e != nil {
 			return nil, e
 		}
@@ -99,9 +101,7 @@ func NewAPIListener(
 		bannedUsers:       security.NewBanList(time.Duration(config.API.UserLoginWait) * time.Second),
 		usersService: &users.APIService{
 			ProviderType: usersProviderType,
-			FileProvider: func() ([]*users.User, error) {
-				return users.GetUsersFromFile(config.API.AuthFile)
-			},
+			FileProvider: usersFromFileProvider,
 			DB:           userDB,
 		},
 	}

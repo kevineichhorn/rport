@@ -2,7 +2,9 @@ package users
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -84,4 +86,62 @@ func (d *UserDatabase) GetAll() ([]*User, error) {
 	}
 
 	return usrs, nil
+}
+
+func (d *UserDatabase) Add(usr *User) error {
+	_, err := d.db.Exec("INSERT INTO `users` (`username`, `password`) VALUES (?, ?)", usr.Username, usr.Password)
+	if err != nil {
+		return err
+	}
+
+	for i := range usr.Groups {
+		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", usr.Username, usr.Groups[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
+	if usernameToUpdate == "" {
+		return errors.New("cannot update user with empty username")
+	}
+
+	params := []interface{}{}
+	statements := []string{}
+	if usr.Password != "" {
+		statements = append(statements, "`password` = ?")
+		params = append(params, usr.Password)
+	}
+
+	if usr.Username != "" && usr.Username != usernameToUpdate {
+		statements = append(statements, "`username` = ?")
+		params = append(params, usr.Username)
+	}
+
+	if len(params) > 0 {
+		q := fmt.Sprintf("UPDATE `users` SET %s", strings.Join(statements, ", "))
+		_, err := d.db.Exec(q, params...)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(usr.Groups) > 0 {
+		_, err := d.db.Exec("DELETE FROM `groups` WHERE `username` = ?", usr.Username)
+		if err != nil {
+			return err
+		}
+	}
+
+	for i := range usr.Groups {
+		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", usernameToUpdate, usr.Groups[i])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

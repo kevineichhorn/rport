@@ -39,6 +39,7 @@ const (
 	queryParamSort = "sort"
 
 	routeParamClientID = "client_id"
+	routeParamUserID   = "user_id"
 	routeParamJobID    = "job_id"
 	routeParamGroupID  = "group_id"
 
@@ -127,6 +128,8 @@ func (al *APIListener) initRouter() {
 	sub.HandleFunc("/me/ip", al.handleGetIP).Methods(http.MethodGet)
 	sub.HandleFunc("/clients", al.handleGetClients).Methods(http.MethodGet)
 	sub.HandleFunc("/users", al.handleGetUsers).Methods(http.MethodGet)
+	sub.HandleFunc("/users", al.handleChangeUser).Methods(http.MethodPost)
+	sub.HandleFunc("/users/{user_id}", al.handleChangeUser).Methods(http.MethodPut)
 	sub.HandleFunc("/clients/{client_id}/tunnels", al.handlePutClientTunnel).Methods(http.MethodPut)
 	sub.HandleFunc("/clients/{client_id}/tunnels/{tunnel_id}", al.handleDeleteClientTunnel).Methods(http.MethodDelete)
 	sub.HandleFunc("/clients/{client_id}/commands", al.handlePostCommand).Methods(http.MethodPost)
@@ -425,7 +428,7 @@ func (al *APIListener) handleGetClients(w http.ResponseWriter, req *http.Request
 }
 
 type UserPayload struct {
-	Username string `json:"username"`
+	Username string   `json:"username"`
 	Groups   []string `json:"groups"`
 }
 
@@ -434,7 +437,7 @@ func (al *APIListener) handleGetUsers(w http.ResponseWriter, req *http.Request) 
 
 	if al.usersService.ProviderType == users.ProviderFromStaticPassword {
 		al.jsonError(w, errors2.APIError{
-			Code: http.StatusBadRequest,
+			Code:    http.StatusBadRequest,
 			Message: "server runs on a static user-password pair, please use JSON file or database for user data",
 		})
 		return
@@ -463,6 +466,34 @@ func (al *APIListener) handleGetUsers(w http.ResponseWriter, req *http.Request) 
 
 	response := api.NewSuccessPayload(usersToSend)
 	al.writeJSONResponse(w, http.StatusOK, response)
+}
+
+func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	userID, userIDExists := vars[routeParamUserID]
+	if !userIDExists {
+		userID = ""
+	}
+
+	var user users.User
+	dec := json.NewDecoder(req.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&user)
+	if err == io.EOF { // is handled separately to return an informative error message
+		al.jsonErrorResponseWithTitle(w, http.StatusBadRequest, "Missing body with json data.")
+		return
+	} else if err != nil {
+		al.jsonErrorResponseWithError(w, http.StatusBadRequest, "", "Invalid JSON data.", err)
+		return
+	}
+
+	if err := al.usersService.Change(req.Context(), &user, userID); err != nil {
+		al.jsonError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	al.Debugf("User [%s] created.", user.Username)
 }
 
 type ClientPayload struct {
@@ -1694,23 +1725,23 @@ func (al *APIListener) validateGroupAccess(ctx context.Context, group string) (e
 	curUsername := api.GetUser(ctx, al.Logger)
 	if curUsername == "" {
 		return errors2.APIError{
-			Message:"unauthorized access",
-			Code: http.StatusUnauthorized,
+			Message: "unauthorized access",
+			Code:    http.StatusUnauthorized,
 		}
 	}
 
 	curUser, err := al.userSrv.GetByUsername(curUsername)
 	if err != nil {
 		return errors2.APIError{
-			Err: err,
+			Err:  err,
 			Code: http.StatusInternalServerError,
 		}
 	}
 
 	if curUser == nil {
 		return errors2.APIError{
-			Message:"unauthorized access",
-			Code: http.StatusUnauthorized,
+			Message: "unauthorized access",
+			Code:    http.StatusUnauthorized,
 		}
 	}
 
@@ -1722,6 +1753,6 @@ func (al *APIListener) validateGroupAccess(ctx context.Context, group string) (e
 
 	return errors2.APIError{
 		Message: fmt.Sprintf("current user should belong to %s group to access this resource", group),
-		Code: http.StatusForbidden,
+		Code:    http.StatusForbidden,
 	}
 }

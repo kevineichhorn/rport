@@ -1,6 +1,7 @@
 package users
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -154,20 +155,75 @@ func TestGetAll(t *testing.T) {
 		{
 			Username: "user2",
 			Password: "pass2",
-			Groups:   []string{
+			Groups: []string{
 				"group1",
 			},
 		},
 		{
 			Username: "user3",
 			Password: "pass3",
-			Groups:   []string{
+			Groups: []string{
 				"group1",
 				"group2",
 			},
 		},
 	}
 	assert.Equal(t, expectedUsers, actualUsers)
+}
+
+func TestAdd(t *testing.T) {
+	db, err := sqlx.Connect("sqlite3", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = prepareTables(db)
+	require.NoError(t, err)
+
+	d, err := NewUserDatabase(db, "users", "groups")
+	require.NoError(t, err)
+
+	givenUser := &User{
+		Username: "login1",
+		Password: "pass1",
+		Groups: []string{
+			"group1",
+			"group2",
+		},
+	}
+
+	err = d.Add(givenUser)
+	require.NoError(t, err)
+
+	actualUser := User{}
+
+	err = d.db.Get(&actualUser, fmt.Sprintf("SELECT username, password FROM `%s`", d.usersTableName))
+	require.NoError(t, err)
+	assert.Equal(t, givenUser.Username, actualUser.Username)
+	assert.Equal(t, givenUser.Password, actualUser.Password)
+
+	type group struct {
+		Username string `db:"username"`
+		Group    string `db:"group"`
+	}
+
+	actualGroups := []group{}
+	err = d.db.Select(&actualGroups, fmt.Sprintf("SELECT `username`, `group` FROM `%s`", d.groupsTableName))
+	require.NoError(t, err)
+
+	assert.Equal(
+		t,
+		[]group{
+			{
+				Username: "login1",
+				Group: "group1",
+			},
+			{
+				Username: "login1",
+				Group: "group2",
+			},
+		},
+		actualGroups,
+	)
 }
 
 func prepareTables(db *sqlx.DB) error {
