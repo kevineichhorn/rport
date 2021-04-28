@@ -60,22 +60,23 @@ func NewAPIListener(
 	var userService UserService
 	var usersProviderType users.ProviderType
 	var userDB *users.UserDatabase
+	var err error
 	if config.API.AuthFile != "" {
-		authUsers, err := users.GetUsersFromFile(config.API.AuthFile)
-		if err != nil {
-			return nil, err
+		authUsers, e := users.GetUsersFromFile(config.API.AuthFile)
+		if e != nil {
+			return nil, e
 		}
 		userService = users.NewUserCache(authUsers)
 		usersProviderType = users.ProviderFromFile
 	} else if config.API.Auth != "" {
-		authUser, err := parseHTTPAuthStr(config.API.Auth)
-		if err != nil {
-			return nil, err
+		authUser, e := parseHTTPAuthStr(config.API.Auth)
+		if e != nil {
+			return nil, e
 		}
 		userService = users.NewUserCache([]*users.User{authUser})
 		usersProviderType = users.ProviderFromStaticPassword
 	} else if config.API.AuthUserTable != "" {
-		userDB, err := users.NewUserDatabase(server.db, config.API.AuthUserTable, config.API.AuthGroupTable)
+		userDB, err = users.NewUserDatabase(server.db, config.API.AuthUserTable, config.API.AuthGroupTable)
 		if err != nil {
 			return nil, err
 		}
@@ -98,8 +99,9 @@ func NewAPIListener(
 		bannedUsers:       security.NewBanList(time.Duration(config.API.UserLoginWait) * time.Second),
 		usersService: &users.APIService{
 			ProviderType: usersProviderType,
-			FilePath:     config.API.AuthFile,
-			AuthPath:     config.API.Auth,
+			FileProvider: func() ([]*users.User, error) {
+				return users.GetUsersFromFile(config.API.AuthFile)
+			},
 			DB:           userDB,
 		},
 	}

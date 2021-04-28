@@ -20,10 +20,16 @@ func GetUsersFromFile(fileName string) ([]*User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open users file: %v", err)
 	}
-	log.Println("API users file opened. Parsing...")
+	log.Printf("API users file %s opened. Parsing...", fileName)
 	defer file.Close()
 
-	return parseUsers(file)
+	users, err := parseUsers(file)
+	if err != nil {
+		return users, err
+	}
+	log.Printf("API users file %s is parsed successfully", fileName)
+
+	return users, nil
 }
 
 func parseUsers(r io.Reader) ([]*User, error) {

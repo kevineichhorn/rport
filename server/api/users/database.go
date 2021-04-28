@@ -55,13 +55,32 @@ func (d *UserDatabase) GetByUsername(username string) (*User, error) {
 }
 
 func (d *UserDatabase) GetAll() ([]*User, error) {
-	usrs := []*User{}
-	err := d.db.Get(usrs, fmt.Sprintf("SELECT * FROM `%s`", d.usersTableName))
+	var usrs []*User
+	err := d.db.Select(&usrs, fmt.Sprintf("SELECT username, password FROM `%s` ORDER BY username", d.usersTableName))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	var groups []struct{
+		Username string `db:"username"`
+		Group string `db:"group"`
+	}
+	err = d.db.Select(&groups, fmt.Sprintf("SELECT `username`, `group` FROM `%s` ORDER BY username", d.groupsTableName))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return usrs, nil
+		}
+		return nil, err
+	}
+	for i := range groups {
+		for y := range usrs {
+			if usrs[y].Username == groups[i].Username {
+				usrs[y].Groups = append(usrs[y].Groups, groups[i].Group)
+			}
+		}
 	}
 
 	return usrs, nil

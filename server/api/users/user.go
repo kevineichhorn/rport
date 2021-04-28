@@ -6,7 +6,7 @@ const (
 
 // User represents API user.
 type User struct {
-	Username string   `json:"username"`
-	Password string   `json:"-"`
-	Groups   []string `json:"groups"`
+	Username string
+	Password string
+	Groups   []string
 }

@@ -1,10 +1,7 @@
 package users
 
 import (
-	"context"
 	"fmt"
-	"github.com/cloudradar-monitoring/rport/server/api/errors"
-	"net/http"
 )
 
 type ProviderType int
@@ -15,23 +12,19 @@ const (
 	ProviderFromDB
 )
 
-type APIService struct {
-	ProviderType ProviderType
-	FilePath     string
-	AuthPath     string
-	DB           *UserDatabase
+type DatabaseProvider interface {
+	GetAll() ([]*User, error)
 }
 
-func (as *APIService) GetAll(ctx context.Context) ([]*User, error) {
-	if as.ProviderType == ProviderFromStaticPassword {
-		return nil, errors.APIError{
-			Code: http.StatusBadRequest,
-			Message: "server runs on a static user-password pair, please use JSON file or database for user data",
-		}
-	}
+type APIService struct {
+	ProviderType ProviderType
+	FileProvider func() ([]*User, error)
+	DB           DatabaseProvider
+}
 
+func (as *APIService) GetAll() ([]*User, error) {
 	if as.ProviderType == ProviderFromFile {
-		authUsers, err := GetUsersFromFile(as.FilePath)
+		authUsers, err := as.FileProvider()
 		if err != nil {
 			return nil, err
 		}

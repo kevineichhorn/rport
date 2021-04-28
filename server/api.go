@@ -200,6 +200,20 @@ func (al *APIListener) jsonErrorResponse(w http.ResponseWriter, statusCode int, 
 	al.writeJSONResponse(w, statusCode, api.NewErrorPayload(err))
 }
 
+func (al *APIListener) jsonError(w http.ResponseWriter, err error) {
+	statusCode := http.StatusInternalServerError
+	errCode := strconv.Itoa(statusCode)
+	msg := err.Error()
+	if apiErr, ok := err.(errors2.APIError); ok {
+		statusCode = apiErr.Code
+		errCode = strconv.Itoa(statusCode)
+		if apiErr.Message != "" {
+			msg = apiErr.Message
+		}
+	}
+	al.writeJSONResponse(w, statusCode, api.NewErrorPayloadWithCode(errCode, msg, ""))
+}
+
 func (al *APIListener) jsonErrorResponseWithErrCode(w http.ResponseWriter, statusCode int, errCode, title string) {
 	al.writeJSONResponse(w, statusCode, api.NewErrorPayloadWithCode(errCode, title, ""))
 }
@@ -410,31 +424,45 @@ func (al *APIListener) handleGetClients(w http.ResponseWriter, req *http.Request
 	al.writeJSONResponse(w, http.StatusOK, api.NewSuccessPayload(clientsPayload))
 }
 
+type UserPayload struct {
+	Username string `json:"username"`
+	Groups   []string `json:"groups"`
+}
+
 func (al *APIListener) handleGetUsers(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
-	status, err := al.validateGroupAccess(ctx, users.Administrators)
-	if err != nil {
-		al.jsonErrorResponse(w, status, err)
+
+	if al.usersService.ProviderType == users.ProviderFromStaticPassword {
+		al.jsonError(w, errors2.APIError{
+			Code: http.StatusBadRequest,
+			Message: "server runs on a static user-password pair, please use JSON file or database for user data",
+		})
 		return
 	}
 
-	usrs, err := al.usersService.GetAll(ctx)
+	err := al.validateGroupAccess(ctx, users.Administrators)
 	if err != nil {
-		if apiErr, ok := err.(errors2.APIError); ok {
-			al.jsonErrorResponse(w, apiErr.Code, apiErr)
-			return
-		}
-
-		al.jsonErrorResponse(w, http.StatusInternalServerError, err)
+		al.jsonError(w, err)
 		return
 	}
 
-	jsonEncoder := json.NewEncoder(w)
-	err = jsonEncoder.Encode(usrs)
+	usrs, err := al.usersService.GetAll()
 	if err != nil {
-		al.jsonErrorResponse(w, http.StatusInternalServerError, err)
+		al.jsonError(w, err)
 		return
 	}
+
+	usersToSend := make([]UserPayload, 0, len(usrs))
+	for i := range usrs {
+		user := usrs[i]
+		usersToSend = append(usersToSend, UserPayload{
+			Username: user.Username,
+			Groups:   user.Groups,
+		})
+	}
+
+	response := api.NewSuccessPayload(usersToSend)
+	al.writeJSONResponse(w, http.StatusOK, response)
 }
 
 type ClientPayload struct {
@@ -1662,26 +1690,38 @@ func (al *APIListener) handleDeleteClientGroup(w http.ResponseWriter, req *http.
 	al.Debugf("Client Group [id=%q] deleted.", id)
 }
 
-func (al *APIListener) validateGroupAccess(ctx context.Context, group string) (statusCode int, err error) {
+func (al *APIListener) validateGroupAccess(ctx context.Context, group string) (err error) {
 	curUsername := api.GetUser(ctx, al.Logger)
 	if curUsername == "" {
-		return http.StatusUnauthorized, errors.New("unauthorized access")
+		return errors2.APIError{
+			Message:"unauthorized access",
+			Code: http.StatusUnauthorized,
+		}
 	}
 
 	curUser, err := al.userSrv.GetByUsername(curUsername)
 	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	if curUser == nil {
-		return http.StatusUnauthorized, errors.New("unauthorized access")
-	}
-
-	for _, g := range curUser.Groups {
-		if g == group {
-			return 0, nil
+		return errors2.APIError{
+			Err: err,
+			Code: http.StatusInternalServerError,
 		}
 	}
 
-	return http.StatusForbidden, errors.New("current user has not enough rights to access this resource")
+	if curUser == nil {
+		return errors2.APIError{
+			Message:"unauthorized access",
+			Code: http.StatusUnauthorized,
+		}
+	}
+
+	for i := range curUser.Groups {
+		if curUser.Groups[i] == group {
+			return nil
+		}
+	}
+
+	return errors2.APIError{
+		Message: fmt.Sprintf("current user should belong to %s group to access this resource", group),
+		Code: http.StatusForbidden,
+	}
 }

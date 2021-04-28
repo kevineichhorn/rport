@@ -13,10 +13,10 @@ func TestNewUserDatabase(t *testing.T) {
 	db, err := sqlx.Connect("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
-	_, err = db.Exec("CREATE TABLE `users` (username TEXT PRIMARY KEY, password TEXT)")
+
+	err = prepareTables(db)
 	require.NoError(t, err)
-	_, err = db.Exec("CREATE TABLE `groups` (username TEXT, `group` TEXT)")
-	require.NoError(t, err)
+
 	_, err = db.Exec("CREATE TABLE `invalid_users` (username TEXT PRIMARY KEY, pass TEXT)")
 	require.NoError(t, err)
 	_, err = db.Exec("CREATE TABLE `invalid_groups` (username TEXT, other TEXT)")
@@ -72,22 +72,13 @@ func TestGetByUsername(t *testing.T) {
 	db, err := sqlx.Connect("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer db.Close()
-	_, err = db.Exec("CREATE TABLE `users` (username TEXT PRIMARY KEY, password TEXT)")
+
+	err = prepareTables(db)
 	require.NoError(t, err)
-	_, err = db.Exec("CREATE TABLE `groups` (username TEXT, `group` TEXT)")
+
+	err = prepareDummyData(db)
 	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `users` (username, password) VALUES (\"user1\", \"pass1\")")
-	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `users` (username, password) VALUES (\"user2\", \"pass2\")")
-	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `users` (username, password) VALUES (\"user3\", \"pass3\")")
-	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user2\", \"group1\")")
-	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user3\", \"group1\")")
-	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user3\", \"group2\")")
-	require.NoError(t, err)
+
 	d, err := NewUserDatabase(db, "users", "groups")
 	require.NoError(t, err)
 
@@ -135,4 +126,94 @@ func TestGetByUsername(t *testing.T) {
 		})
 	}
 
+}
+
+func TestGetAll(t *testing.T) {
+	db, err := sqlx.Connect("sqlite3", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = prepareTables(db)
+	require.NoError(t, err)
+
+	err = prepareDummyData(db)
+	require.NoError(t, err)
+
+	d, err := NewUserDatabase(db, "users", "groups")
+	require.NoError(t, err)
+
+	actualUsers, err := d.GetAll()
+	require.NoError(t, err)
+
+	expectedUsers := []*User{
+		{
+			Username: "user1",
+			Password: "pass1",
+			Groups:   nil,
+		},
+		{
+			Username: "user2",
+			Password: "pass2",
+			Groups:   []string{
+				"group1",
+			},
+		},
+		{
+			Username: "user3",
+			Password: "pass3",
+			Groups:   []string{
+				"group1",
+				"group2",
+			},
+		},
+	}
+	assert.Equal(t, expectedUsers, actualUsers)
+}
+
+func prepareTables(db *sqlx.DB) error {
+	_, err := db.Exec("CREATE TABLE `users` (username TEXT PRIMARY KEY, password TEXT)")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("CREATE TABLE `groups` (username TEXT, `group` TEXT)")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func prepareDummyData(db *sqlx.DB) error {
+	_, err := db.Exec("INSERT INTO `users` (username, password) VALUES (\"user1\", \"pass1\")")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("INSERT INTO `users` (username, password) VALUES (\"user2\", \"pass2\")")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("INSERT INTO `users` (username, password) VALUES (\"user3\", \"pass3\")")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user2\", \"group1\")")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user3\", \"group1\")")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec("INSERT INTO `groups` (username, `group`) VALUES (\"user3\", \"group2\")")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
