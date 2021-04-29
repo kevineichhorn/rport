@@ -487,7 +487,7 @@ func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	if err := al.usersService.Change(req.Context(), &user, userID); err != nil {
+	if err := al.usersService.Change(&user, userID); err != nil {
 		al.jsonError(w, err)
 		return
 	}

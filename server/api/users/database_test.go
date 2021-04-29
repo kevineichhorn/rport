@@ -172,58 +172,209 @@ func TestGetAll(t *testing.T) {
 }
 
 func TestAdd(t *testing.T) {
-	db, err := sqlx.Connect("sqlite3", ":memory:")
-	require.NoError(t, err)
-	defer db.Close()
-
-	err = prepareTables(db)
-	require.NoError(t, err)
-
-	d, err := NewUserDatabase(db, "users", "groups")
-	require.NoError(t, err)
-
-	givenUser := &User{
-		Username: "login1",
-		Password: "pass1",
-		Groups: []string{
-			"group1",
-			"group2",
+	testCases := []struct {
+		name              string
+		userToChange      *User
+		expectedUserRows  []map[string]interface{}
+		expectedGroupRows []map[string]interface{}
+	}{
+		{
+			name: "create user",
+			userToChange: &User{
+				Username: "login1",
+				Password: "pass1",
+				Groups: []string{
+					"group1",
+					"group2",
+				},
+			},
+			expectedUserRows: []map[string]interface{}{
+				{
+					"username": "login1",
+					"password": "pass1",
+				},
+			},
+			expectedGroupRows: []map[string]interface{}{
+				{
+					"username": "login1",
+					"group":    "group1",
+				},
+				{
+					"username": "login1",
+					"group":    "group2",
+				},
+			},
 		},
 	}
 
-	err = d.Add(givenUser)
-	require.NoError(t, err)
+	for i := range testCases {
+		t.Run(testCases[i].name, func(t *testing.T) {
+			testCase := testCases[i]
 
-	actualUser := User{}
+			db, err := sqlx.Connect("sqlite3", ":memory:")
+			require.NoError(t, err)
+			defer db.Close()
 
-	err = d.db.Get(&actualUser, fmt.Sprintf("SELECT username, password FROM `%s`", d.usersTableName))
-	require.NoError(t, err)
-	assert.Equal(t, givenUser.Username, actualUser.Username)
-	assert.Equal(t, givenUser.Password, actualUser.Password)
+			err = prepareTables(db)
+			require.NoError(t, err)
 
-	type group struct {
-		Username string `db:"username"`
-		Group    string `db:"group"`
+			d, err := NewUserDatabase(db, "users", "groups")
+			require.NoError(t, err)
+
+			err = d.Add(testCase.userToChange)
+			require.NoError(t, err)
+
+			assertUserTableEquals(t, d.db,  d.usersTableName, testCase.expectedUserRows)
+			assertGroupTableEquals(t, d.db, d.groupsTableName, testCase.expectedGroupRows)
+		})
 	}
+}
 
-	actualGroups := []group{}
-	err = d.db.Select(&actualGroups, fmt.Sprintf("SELECT `username`, `group` FROM `%s`", d.groupsTableName))
-	require.NoError(t, err)
-
-	assert.Equal(
-		t,
-		[]group{
-			{
-				Username: "login1",
-				Group: "group1",
+func TestUpdate(t *testing.T) {
+	testCases := []struct {
+		name              string
+		userToChange      *User
+		username          string
+		expectedUserRows  []map[string]interface{}
+		expectedGroupRows []map[string]interface{}
+	}{
+		{
+			name: "overwrite all fields",
+			userToChange: &User{
+				Username: "user_one",
+				Password: "pass_one",
+				Groups: []string{
+					"group1",
+				},
 			},
-			{
-				Username: "login1",
-				Group: "group2",
+			username: "user1",
+			expectedUserRows: []map[string]interface{}{
+				{
+					"username": "user2",
+					"password": "pass2",
+				},
+				{
+					"username": "user3",
+					"password": "pass3",
+				},
+				{
+					"username": "user_one",
+					"password": "pass_one",
+				},
+			},
+			expectedGroupRows: []map[string]interface{}{
+				{
+					"username": "user2",
+					"group": "group1",
+				},
+				{
+					"username": "user3",
+					"group": "group1",
+				},
+				{
+					"username": "user3",
+					"group": "group2",
+				},
+				{
+					"username": "user_one",
+					"group": "group1",
+				},
 			},
 		},
-		actualGroups,
-	)
+		{
+			name: "overwrite pass",
+			userToChange: &User{
+				Password: "pass_two",
+			},
+			username: "user2",
+			expectedUserRows: []map[string]interface{}{
+				{
+					"username": "user1",
+					"password": "pass1",
+				},
+				{
+					"username": "user2",
+					"password": "pass_two",
+				},
+				{
+					"username": "user3",
+					"password": "pass3",
+				},
+			},
+			expectedGroupRows: []map[string]interface{}{
+				{
+					"username": "user2",
+					"group": "group1",
+				},
+				{
+					"username": "user3",
+					"group": "group1",
+				},
+				{
+					"username": "user3",
+					"group": "group2",
+				},
+			},
+		},
+		{
+			name: "overwrite groups",
+			userToChange: &User{
+				Groups: []string{
+					"group1",
+				},
+			},
+			username: "user3",
+			expectedUserRows: []map[string]interface{}{
+				{
+					"username": "user1",
+					"password": "pass1",
+				},
+				{
+					"username": "user2",
+					"password": "pass2",
+				},
+				{
+					"username": "user3",
+					"password": "pass3",
+				},
+			},
+			expectedGroupRows: []map[string]interface{}{
+				{
+					"username": "user2",
+					"group": "group1",
+				},
+				{
+					"username": "user3",
+					"group": "group1",
+				},
+			},
+		},
+	}
+
+	for i := range testCases {
+		t.Run(testCases[i].name, func(t *testing.T) {
+			db, err := sqlx.Connect("sqlite3", ":memory:")
+			require.NoError(t, err)
+			defer db.Close()
+
+			err = prepareTables(db)
+			require.NoError(t, err)
+
+			err = prepareDummyData(db)
+			require.NoError(t, err)
+
+			d, err := NewUserDatabase(db, "users", "groups")
+			require.NoError(t, err)
+
+			testCase := testCases[i]
+
+			err = d.Update(testCase.userToChange, testCase.username)
+			require.NoError(t, err)
+
+			assertUserTableEquals(t, d.db,  d.usersTableName, testCase.expectedUserRows)
+			assertGroupTableEquals(t, d.db, d.groupsTableName, testCase.expectedGroupRows)
+		})
+	}
 }
 
 func prepareTables(db *sqlx.DB) error {
@@ -272,4 +423,36 @@ func prepareDummyData(db *sqlx.DB) error {
 	}
 
 	return nil
+}
+
+func assertUserTableEquals(t *testing.T, db *sqlx.DB, usersTableName string, expectedRows []map[string]interface{}) {
+	dbRows, err := db.Queryx(fmt.Sprintf("SELECT `username`, `password` FROM `%s` order by `username`", usersTableName))
+	require.NoError(t, err)
+
+	userRows, err := convertDbRowsToMapSlice(dbRows)
+	require.NoError(t, err)
+	assert.Equal(t, expectedRows, userRows)
+}
+
+func assertGroupTableEquals(t *testing.T, db *sqlx.DB, groupTableName string, expectedRows []map[string]interface{}) {
+	dbRows, err := db.Queryx(fmt.Sprintf("SELECT `username`, `group` FROM `%s` order by `username`, `group`", groupTableName))
+	require.NoError(t, err)
+
+	groupRows, err := convertDbRowsToMapSlice(dbRows)
+	require.NoError(t, err)
+	assert.Equal(t, expectedRows, groupRows)
+}
+
+func convertDbRowsToMapSlice(dbRows *sqlx.Rows) ([]map[string]interface{}, error) {
+	dataRows := make([]map[string]interface{}, 0)
+	for dbRows.Next() {
+		dataRow := make(map[string]interface{})
+		err := dbRows.MapScan(dataRow)
+		if err != nil {
+			return nil, err
+		}
+		dataRows = append(dataRows, dataRow)
+	}
+
+	return dataRows, nil
 }

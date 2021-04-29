@@ -122,22 +122,36 @@ func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
 	}
 
 	if len(params) > 0 {
-		q := fmt.Sprintf("UPDATE `users` SET %s", strings.Join(statements, ", "))
+		q := fmt.Sprintf("UPDATE `users` SET %s WHERE username = ?", strings.Join(statements, ", "))
+		params = append(params, usernameToUpdate)
 		_, err := d.db.Exec(q, params...)
 		if err != nil {
 			return err
 		}
 	}
 
+	if usr.Username != "" && usernameToUpdate != usr.Username {
+		_, err := d.db.Exec("UPDATE `groups` SET `username` = ? WHERE `username` = ?", usr.Username, usernameToUpdate)
+		if err != nil {
+			return err
+		}
+	}
+
+	groupUserName := usernameToUpdate
+	if usr.Username != "" {
+		groupUserName = usr.Username
+	}
+
 	if len(usr.Groups) > 0 {
-		_, err := d.db.Exec("DELETE FROM `groups` WHERE `username` = ?", usr.Username)
+		_, err := d.db.Exec("DELETE FROM `groups` WHERE `username` = ?", groupUserName)
 		if err != nil {
 			return err
 		}
 	}
 
 	for i := range usr.Groups {
-		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", usernameToUpdate, usr.Groups[i])
+		group := usr.Groups[i]
+		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", groupUserName, group)
 		if err != nil {
 			return err
 		}

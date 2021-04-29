@@ -2,6 +2,8 @@ package users
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -165,4 +167,39 @@ func TestParseUsers(t *testing.T) {
 		assert.Lenf(t, gotRes, len(tc.wantRes), msg)
 		assert.ElementsMatch(t, gotRes, tc.wantRes, msg)
 	}
+}
+
+func TestSaveUsersToFile(t *testing.T) {
+	givenUsers := []*User{
+		{
+			Username: "user1",
+			Password: htpasswdBcryptPrefix + "pass1",
+			Groups:   []string{"group1"},
+		},
+		{
+			Username: "user2",
+			Password: htpasswdBcryptPrefix + "pass2",
+			Groups:   []string{"group1", "group2"},
+		},
+	}
+
+	tmpfile, err := ioutil.TempFile("", "example")
+	require.NoError(t, err)
+
+	fm := FileManager{
+		FileName: tmpfile.Name(),
+	}
+
+	defer func() {
+		err := os.Remove(tmpfile.Name())
+		require.NoError(t, err)
+	}()
+
+	err = fm.SaveUsersToFile(givenUsers)
+	require.NoError(t, err)
+
+	actualUsers, err := fm.ReadUsersFromFile()
+	require.NoError(t, err)
+
+	assert.Equal(t, givenUsers, actualUsers)
 }

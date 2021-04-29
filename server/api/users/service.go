@@ -1,7 +1,6 @@
 package users
 
 import (
-	"context"
 	"fmt"
 	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
 	"golang.org/x/crypto/bcrypt"
@@ -55,7 +54,7 @@ func (as *APIService) GetAll() ([]*User, error) {
 	return nil, fmt.Errorf("unknown user data provider type: %d", as.ProviderType)
 }
 
-func (as *APIService) Change(ctx context.Context, usr *User, userKey string) error {
+func (as *APIService) Change(usr *User, userKey string) error {
 	if usr.Password != "" {
 		passHash, err := bcrypt.GenerateFromPassword([]byte(usr.Password), bcrypt.DefaultCost)
 		if err != nil {
@@ -91,7 +90,7 @@ func (as *APIService) validate(dataToChange *User, userKeyToFind string) error {
 			errs = append(errs, "password is required")
 		}
 	} else {
-		if dataToChange.Username == "" && dataToChange.Password == "" && len(dataToChange.Groups) == 0 {
+		if (dataToChange.Username == "" || dataToChange.Username == userKeyToFind) && dataToChange.Password == "" && len(dataToChange.Groups) == 0 {
 			errs = append(errs, "nothing to change")
 		}
 	}
@@ -153,16 +152,19 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 
 	if userKeyToFind == "" {
 		users = append(users, dataToChange)
-		err := as.FileProvider.SaveUsersToFile(users)
+		err = as.FileProvider.SaveUsersToFile(users)
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 
+	userFound := false
 	for i := range users {
 		if users[i].Username != userKeyToFind {
 			continue
 		}
+		userFound = true
 		if dataToChange.Password != "" {
 			users[i].Password = dataToChange.Password
 		}
@@ -172,6 +174,10 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 		if dataToChange.Username != "" {
 			users[i].Username = dataToChange.Username
 		}
+	}
+
+	if !userFound {
+		return fmt.Errorf("cannot find user by username '%s'", userKeyToFind)
 	}
 
 	err = as.FileProvider.SaveUsersToFile(users)
