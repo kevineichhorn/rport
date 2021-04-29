@@ -9,12 +9,14 @@ import (
 )
 
 type DBProviderMock struct {
-	UsersToGive        []*User
-	UsersToAdd         []*User
-	UsersToUpdate      []*User
-	ErrorToGiveOnRead  error
-	ErrorToGiveOnWrite error
-	UsernameToUpdate   string
+	UsersToGive         []*User
+	UsersToAdd          []*User
+	UsersToUpdate       []*User
+	ErrorToGiveOnRead   error
+	ErrorToGiveOnWrite  error
+	ErrorToGiveOnDelete error
+	UsernameToUpdate    string
+	UsernameToDelete    string
 }
 
 func (dpm *DBProviderMock) GetAll() ([]*User, error) {
@@ -51,6 +53,11 @@ func (dpm *DBProviderMock) Update(usr *User, usernameToUpdate string) error {
 	dpm.UsernameToUpdate = usernameToUpdate
 
 	return dpm.ErrorToGiveOnWrite
+}
+
+func (dpm *DBProviderMock) Delete(usernameToDelete string) error {
+	dpm.UsernameToDelete = usernameToDelete
+	return dpm.ErrorToGiveOnDelete
 }
 
 type FileManagerMock struct {
@@ -218,6 +225,9 @@ func TestUnsupportedUserProvider(t *testing.T) {
 		Password: "pass_one",
 	}
 	err = service.Change(userToUpdate, "")
+	require.EqualError(t, err, fmt.Sprintf("unknown user data provider type: %d", ProviderFromStaticPassword))
+
+	err = service.Delete("some")
 	require.EqualError(t, err, fmt.Sprintf("unknown user data provider type: %d", ProviderFromStaticPassword))
 }
 
@@ -485,4 +495,88 @@ func TestUpdateUserInDB(t *testing.T) {
 	}
 	err = service.Change(userToUpdate, "user2")
 	require.EqualError(t, err, "failed to write to DB")
+}
+
+func TestDeleteUserFromDB(t *testing.T) {
+	dbProvider := &DBProviderMock{}
+
+	service := APIService{
+		ProviderType: ProviderFromDB,
+		DB:           dbProvider,
+	}
+
+	err := service.Delete("user2")
+	require.NoError(t, err)
+	assert.Equal(t, "user2", dbProvider.UsernameToDelete)
+
+	dbProvider = &DBProviderMock{
+		ErrorToGiveOnDelete: errors.New("failed to delete from db"),
+	}
+
+	service = APIService{
+		ProviderType: ProviderFromDB,
+		DB:           dbProvider,
+	}
+
+	err = service.Delete("user2")
+	require.EqualError(t, err, "failed to delete from db")
+}
+
+func TestDeleteUserFromFile(t *testing.T) {
+	usersFileManager := &FileManagerMock{
+		UsersToRead: []*User{
+			{
+				Username: "user2",
+			},
+			{
+				Username: "user1",
+				Password: "pass1",
+				Groups:   []string{"group1", "group2"},
+			},
+		},
+	}
+
+	service := APIService{
+		ProviderType: ProviderFromFile,
+		FileProvider: usersFileManager,
+	}
+
+	err := service.Delete("user2")
+	require.NoError(t, err)
+	expectedUsers := []*User{
+		{
+			Username: "user1",
+			Password: "pass1",
+			Groups:   []string{"group1", "group2"},
+		},
+	}
+	assert.Equal(t, expectedUsers, usersFileManager.WrittenUsers)
+
+	err = service.Delete("unknown_user")
+	require.EqualError(t, err, "unknown user 'unknown_user'")
+
+	usersFileManager = &FileManagerMock{
+		ErrorToGiveOnRead: errors.New("failed to read users from file"),
+	}
+	service = APIService{
+		ProviderType: ProviderFromFile,
+		FileProvider: usersFileManager,
+	}
+	err = service.Delete("user2")
+	require.EqualError(t, err, "failed to read users from file")
+
+	usersFileManager = &FileManagerMock{
+		UsersToRead: []*User{
+			{
+				Username: "user3",
+			},
+		},
+		ErrorToGiveOnWrite: errors.New("failed to write users to file"),
+	}
+	service = APIService{
+		ProviderType: ProviderFromFile,
+		FileProvider: usersFileManager,
+	}
+	err = service.Delete("user3")
+	require.EqualError(t, err, "failed to write users to file")
 }

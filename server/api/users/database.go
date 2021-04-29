@@ -66,9 +66,9 @@ func (d *UserDatabase) GetAll() ([]*User, error) {
 		return nil, err
 	}
 
-	var groups []struct{
+	var groups []struct {
 		Username string `db:"username"`
-		Group string `db:"group"`
+		Group    string `db:"group"`
 	}
 	err = d.db.Select(&groups, fmt.Sprintf("SELECT `username`, `group` FROM `%s` ORDER BY username", d.groupsTableName))
 	if err != nil {
@@ -89,13 +89,21 @@ func (d *UserDatabase) GetAll() ([]*User, error) {
 }
 
 func (d *UserDatabase) Add(usr *User) error {
-	_, err := d.db.Exec("INSERT INTO `users` (`username`, `password`) VALUES (?, ?)", usr.Username, usr.Password)
+	_, err := d.db.Exec(
+		fmt.Sprintf("INSERT INTO `%s` (`username`, `password`) VALUES (?, ?)", d.usersTableName),
+		usr.Username,
+		usr.Password,
+	)
 	if err != nil {
 		return err
 	}
 
 	for i := range usr.Groups {
-		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", usr.Username, usr.Groups[i])
+		_, err := d.db.Exec(
+			fmt.Sprintf("INSERT INTO `%s` (`username`, `group`) VALUES (?, ?)", d.groupsTableName),
+			usr.Username,
+			usr.Groups[i],
+		)
 		if err != nil {
 			return err
 		}
@@ -122,7 +130,11 @@ func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
 	}
 
 	if len(params) > 0 {
-		q := fmt.Sprintf("UPDATE `users` SET %s WHERE username = ?", strings.Join(statements, ", "))
+		q := fmt.Sprintf(
+			"UPDATE `%s` SET %s WHERE username = ?",
+			d.usersTableName,
+			strings.Join(statements, ", "),
+		)
 		params = append(params, usernameToUpdate)
 		_, err := d.db.Exec(q, params...)
 		if err != nil {
@@ -131,7 +143,11 @@ func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
 	}
 
 	if usr.Username != "" && usernameToUpdate != usr.Username {
-		_, err := d.db.Exec("UPDATE `groups` SET `username` = ? WHERE `username` = ?", usr.Username, usernameToUpdate)
+		_, err := d.db.Exec(
+			fmt.Sprintf("UPDATE `%s` SET `username` = ? WHERE `username` = ?", d.groupsTableName),
+			usr.Username,
+			usernameToUpdate,
+		)
 		if err != nil {
 			return err
 		}
@@ -143,7 +159,7 @@ func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
 	}
 
 	if len(usr.Groups) > 0 {
-		_, err := d.db.Exec("DELETE FROM `groups` WHERE `username` = ?", groupUserName)
+		_, err := d.db.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE `username` = ?", d.groupsTableName), groupUserName)
 		if err != nil {
 			return err
 		}
@@ -151,10 +167,28 @@ func (d *UserDatabase) Update(usr *User, usernameToUpdate string) error {
 
 	for i := range usr.Groups {
 		group := usr.Groups[i]
-		_, err := d.db.Exec("INSERT INTO `groups` (`username`, `group`) VALUES (?, ?)", groupUserName, group)
+		_, err := d.db.Exec(
+			fmt.Sprintf("INSERT INTO `%s` (`username`, `group`) VALUES (?, ?)", d.groupsTableName),
+			groupUserName,
+			group,
+		)
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (d *UserDatabase) Delete(usernameToDelete string) error {
+	_, err := d.db.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE `username` = ?", d.usersTableName), usernameToDelete)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.db.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE `username` = ?", d.groupsTableName), usernameToDelete)
+	if err != nil {
+		return err
 	}
 
 	return nil

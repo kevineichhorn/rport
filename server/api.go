@@ -130,6 +130,7 @@ func (al *APIListener) initRouter() {
 	sub.HandleFunc("/users", al.handleGetUsers).Methods(http.MethodGet)
 	sub.HandleFunc("/users", al.handleChangeUser).Methods(http.MethodPost)
 	sub.HandleFunc("/users/{user_id}", al.handleChangeUser).Methods(http.MethodPut)
+	sub.HandleFunc("/users/{user_id}", al.handleDeleteUser).Methods(http.MethodDelete)
 	sub.HandleFunc("/clients/{client_id}/tunnels", al.handlePutClientTunnel).Methods(http.MethodPut)
 	sub.HandleFunc("/clients/{client_id}/tunnels/{tunnel_id}", al.handleDeleteClientTunnel).Methods(http.MethodDelete)
 	sub.HandleFunc("/clients/{client_id}/commands", al.handlePostCommand).Methods(http.MethodPost)
@@ -494,6 +495,23 @@ func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request
 
 	w.WriteHeader(http.StatusCreated)
 	al.Debugf("User [%s] created.", user.Username)
+}
+
+func (al *APIListener) handleDeleteUser(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	userID, userIDExists := vars[routeParamUserID]
+	if !userIDExists {
+		al.jsonErrorResponseWithTitle(w, http.StatusBadRequest, "Empty user id provided")
+		return
+	}
+
+	if err := al.usersService.Delete(userID); err != nil {
+		al.jsonError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	al.Debugf("User [%s] deleted.", userID)
 }
 
 type ClientPayload struct {

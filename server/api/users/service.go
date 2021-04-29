@@ -21,6 +21,7 @@ type DatabaseProvider interface {
 	GetByUsername(username string) (*User, error)
 	Add(usr *User) error
 	Update(usr *User, usernameToUpdate string) error
+	Delete(usernameToDelete string) error
 }
 
 type FileProvider interface {
@@ -185,5 +186,42 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 		return err
 	}
 
+	return nil
+}
+
+func (as *APIService) Delete(usernameToDelete string) error {
+	if as.ProviderType == ProviderFromFile {
+		return as.deleteUserFromFile(usernameToDelete)
+	}
+
+	if as.ProviderType == ProviderFromDB {
+		return as.DB.Delete(usernameToDelete)
+	}
+
+	return fmt.Errorf("unknown user data provider type: %d", as.ProviderType)
+}
+
+func (as *APIService) deleteUserFromFile(usernameToDelete string) error {
+	usersFromFile, err := as.FileProvider.ReadUsersFromFile()
+	if err != nil {
+		return err
+	}
+	foundIndex := -1
+	for i := range usersFromFile {
+		if usersFromFile[i].Username == usernameToDelete {
+			foundIndex = i
+			break
+		}
+	}
+
+	if foundIndex < 0 {
+		return fmt.Errorf("unknown user '%s'", usernameToDelete)
+	}
+
+	usersToWriteToFile := append(usersFromFile[:foundIndex], usersFromFile[foundIndex+1:]...)
+	err = as.FileProvider.SaveUsersToFile(usersToWriteToFile)
+	if err != nil {
+		return err
+	}
 	return nil
 }

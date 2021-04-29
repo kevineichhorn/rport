@@ -377,6 +377,33 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	db, err := sqlx.Connect("sqlite3", ":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = prepareTables(db)
+	require.NoError(t, err)
+
+	err = prepareDummyData(db)
+	require.NoError(t, err)
+
+	d, err := NewUserDatabase(db, "users", "groups")
+	require.NoError(t, err)
+
+	err = d.Delete("user1")
+	require.NoError(t, err)
+
+	err = d.Delete("user2")
+	require.NoError(t, err)
+
+	err = d.Delete("user3")
+	require.NoError(t, err)
+
+	assertUserTableEquals(t, db, d.usersTableName, []map[string]interface{}{})
+	assertGroupTableEquals(t, db, d.groupsTableName, []map[string]interface{}{})
+}
+
 func prepareTables(db *sqlx.DB) error {
 	_, err := db.Exec("CREATE TABLE `users` (username TEXT PRIMARY KEY, password TEXT)")
 	if err != nil {
