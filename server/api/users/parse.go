@@ -44,7 +44,7 @@ func (fm *FileManager) SaveUsersToFile(usrs []*User) error {
 		return err
 	}
 
-	return ioutil.WriteFile(fm.FileName, file, 0644)
+	return ioutil.WriteFile(fm.FileName, file, 0600)
 }
 
 func parseUsers(r io.Reader) ([]*User, error) {

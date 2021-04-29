@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
 	"golang.org/x/crypto/bcrypt"
+
+	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
 )
 
 type ProviderType int
