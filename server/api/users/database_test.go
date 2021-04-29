@@ -224,7 +224,7 @@ func TestAdd(t *testing.T) {
 			err = d.Add(testCase.userToChange)
 			require.NoError(t, err)
 
-			assertUserTableEquals(t, d.db,  d.usersTableName, testCase.expectedUserRows)
+			assertUserTableEquals(t, d.db, d.usersTableName, testCase.expectedUserRows)
 			assertGroupTableEquals(t, d.db, d.groupsTableName, testCase.expectedGroupRows)
 		})
 	}
@@ -265,19 +265,19 @@ func TestUpdate(t *testing.T) {
 			expectedGroupRows: []map[string]interface{}{
 				{
 					"username": "user2",
-					"group": "group1",
+					"group":    "group1",
 				},
 				{
 					"username": "user3",
-					"group": "group1",
+					"group":    "group1",
 				},
 				{
 					"username": "user3",
-					"group": "group2",
+					"group":    "group2",
 				},
 				{
 					"username": "user_one",
-					"group": "group1",
+					"group":    "group1",
 				},
 			},
 		},
@@ -304,15 +304,15 @@ func TestUpdate(t *testing.T) {
 			expectedGroupRows: []map[string]interface{}{
 				{
 					"username": "user2",
-					"group": "group1",
+					"group":    "group1",
 				},
 				{
 					"username": "user3",
-					"group": "group1",
+					"group":    "group1",
 				},
 				{
 					"username": "user3",
-					"group": "group2",
+					"group":    "group2",
 				},
 			},
 		},
@@ -341,11 +341,11 @@ func TestUpdate(t *testing.T) {
 			expectedGroupRows: []map[string]interface{}{
 				{
 					"username": "user2",
-					"group": "group1",
+					"group":    "group1",
 				},
 				{
 					"username": "user3",
-					"group": "group1",
+					"group":    "group1",
 				},
 			},
 		},
@@ -371,7 +371,7 @@ func TestUpdate(t *testing.T) {
 			err = d.Update(testCase.userToChange, testCase.username)
 			require.NoError(t, err)
 
-			assertUserTableEquals(t, d.db,  d.usersTableName, testCase.expectedUserRows)
+			assertUserTableEquals(t, d.db, d.usersTableName, testCase.expectedUserRows)
 			assertGroupTableEquals(t, d.db, d.groupsTableName, testCase.expectedGroupRows)
 		})
 	}

@@ -3,8 +3,8 @@ package errors
 // APIError wraps error which is interpreted as in http error
 type APIError struct {
 	Message string
-	Err error
-	Code int
+	Err     error
+	Code    int
 }
 
 // Error interface implementation

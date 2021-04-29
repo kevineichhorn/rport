@@ -2,10 +2,11 @@ package users
 
 import (
 	"fmt"
-	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strings"
+
+	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type ProviderType int

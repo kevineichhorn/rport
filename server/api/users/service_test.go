@@ -3,9 +3,10 @@ package users
 import (
 	"errors"
 	"fmt"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type DBProviderMock struct {
