@@ -471,6 +471,13 @@ func (al *APIListener) handleGetUsers(w http.ResponseWriter, req *http.Request) 
 }
 
 func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	err := al.validateGroupAccess(ctx, users.Administrators)
+	if err != nil {
+		al.jsonError(w, err)
+		return
+	}
+
 	vars := mux.Vars(req)
 	userID, userIDExists := vars[routeParamUserID]
 	if !userIDExists {
@@ -480,7 +487,7 @@ func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request
 	var user users.User
 	dec := json.NewDecoder(req.Body)
 	dec.DisallowUnknownFields()
-	err := dec.Decode(&user)
+	err = dec.Decode(&user)
 	if err == io.EOF { // is handled separately to return an informative error message
 		al.jsonErrorResponseWithTitle(w, http.StatusBadRequest, "Missing body with json data.")
 		return
@@ -494,11 +501,22 @@ func (al *APIListener) handleChangeUser(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	if userIDExists {
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
 	al.Debugf("User [%s] created.", user.Username)
 }
 
 func (al *APIListener) handleDeleteUser(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	err := al.validateGroupAccess(ctx, users.Administrators)
+	if err != nil {
+		al.jsonError(w, err)
+		return
+	}
+
 	vars := mux.Vars(req)
 	userID, userIDExists := vars[routeParamUserID]
 	if !userIDExists {

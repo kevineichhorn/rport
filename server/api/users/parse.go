@@ -12,6 +12,7 @@ import (
 )
 
 const htpasswdBcryptPrefix = "$2y$"
+const htpasswdBcryptAltPrefix = "$2a$"
 
 type FileManager struct {
 	FileName string

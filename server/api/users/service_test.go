@@ -3,7 +3,11 @@ package users
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"testing"
+
+	errors2 "github.com/cloudradar-monitoring/rport/server/api/errors"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -325,7 +329,14 @@ func TestUpdateUserInFile(t *testing.T) {
 		Password: "222",
 	}
 	err = service.Change(userToUpdate, "unknown_user")
-	assert.EqualError(t, err, "cannot find user by username 'unknown_user'")
+	assert.Equal(
+		t,
+		errors2.APIError{
+			Message: "cannot find user by username 'unknown_user'",
+			Code:    http.StatusNotFound,
+		},
+		err,
+	)
 
 	service = APIService{
 		ProviderType: ProviderFromFile,
@@ -363,7 +374,8 @@ func TestAddUserToDB(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, dbProvider.UsersToAdd, 1)
-	assert.Equal(t, givenUser, dbProvider.UsersToAdd[0])
+	assert.Equal(t, "user13", dbProvider.UsersToAdd[0].Username)
+	assert.True(t, strings.HasPrefix(dbProvider.UsersToAdd[0].Password, htpasswdBcryptPrefix))
 	require.Len(t, dbProvider.UsersToUpdate, 0)
 
 	dbProvider = &DBProviderMock{
@@ -475,8 +487,19 @@ func TestUpdateUserInDB(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, dbProvider.UsersToUpdate, 1)
+	assert.Len(t, dbProvider.UsersToAdd, 0)
 	assert.Equal(t, userToUpdate, dbProvider.UsersToUpdate[0])
 	assert.Equal(t, "user1", dbProvider.UsernameToUpdate)
+
+	err = service.Change(userToUpdate, "non-existing-user")
+	assert.Equal(
+		t,
+		errors2.APIError{
+			Message: "cannot find user by username 'non-existing-user'",
+			Code:    http.StatusNotFound,
+		},
+		err,
+	)
 
 	service = APIService{
 		ProviderType: ProviderFromDB,
@@ -499,7 +522,13 @@ func TestUpdateUserInDB(t *testing.T) {
 }
 
 func TestDeleteUserFromDB(t *testing.T) {
-	dbProvider := &DBProviderMock{}
+	dbProvider := &DBProviderMock{
+		UsersToGive: []*User{
+			{
+				Username: "user2",
+			},
+		},
+	}
 
 	service := APIService{
 		ProviderType: ProviderFromDB,
@@ -510,7 +539,22 @@ func TestDeleteUserFromDB(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "user2", dbProvider.UsernameToDelete)
 
+	err = service.Delete("unknown_user")
+	assert.Equal(
+		t,
+		errors2.APIError{
+			Message: "cannot find user by username 'unknown_user'",
+			Code:    http.StatusNotFound,
+		},
+		err,
+	)
+
 	dbProvider = &DBProviderMock{
+		UsersToGive: []*User{
+			{
+				Username: "user2",
+			},
+		},
 		ErrorToGiveOnDelete: errors.New("failed to delete from db"),
 	}
 
@@ -554,7 +598,14 @@ func TestDeleteUserFromFile(t *testing.T) {
 	assert.Equal(t, expectedUsers, usersFileManager.WrittenUsers)
 
 	err = service.Delete("unknown_user")
-	require.EqualError(t, err, "unknown user 'unknown_user'")
+	assert.Equal(
+		t,
+		errors2.APIError{
+			Message: "cannot find user by username 'unknown_user'",
+			Code:    http.StatusNotFound,
+		},
+		err,
+	)
 
 	usersFileManager = &FileManagerMock{
 		ErrorToGiveOnRead: errors.New("failed to read users from file"),

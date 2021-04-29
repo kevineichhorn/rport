@@ -63,7 +63,7 @@ func (as *APIService) Change(usr *User, userKey string) error {
 		if err != nil {
 			return err
 		}
-		usr.Password = string(passHash)
+		usr.Password = strings.Replace(string(passHash), htpasswdBcryptAltPrefix, htpasswdBcryptPrefix, 1)
 	}
 
 	err := as.validate(usr, userKey)
@@ -72,11 +72,11 @@ func (as *APIService) Change(usr *User, userKey string) error {
 	}
 
 	if as.ProviderType == ProviderFromFile {
-		return as.addUserToFile(usr, userKey)
+		return as.changeUserInFile(usr, userKey)
 	}
 
 	if as.ProviderType == ProviderFromDB {
-		return as.addUserToDB(usr, userKey)
+		return as.changeUserInDB(usr, userKey)
 	}
 
 	return fmt.Errorf("unknown user data provider type: %d", as.ProviderType)
@@ -108,24 +108,17 @@ func (as *APIService) validate(dataToChange *User, userKeyToFind string) error {
 	}
 }
 
-func (as *APIService) addUserToDB(dataToChange *User, userKeyToFind string) error {
+func (as *APIService) addUserToDB(dataToChange *User) error {
 	if dataToChange.Username != "" {
 		existingUser, err := as.DB.GetByUsername(dataToChange.Username)
 		if err != nil {
 			return err
 		}
-		if existingUser != nil && (userKeyToFind == "" || existingUser.Username != userKeyToFind) {
+		if existingUser != nil {
 			return errors2.APIError{
 				Message: "Another user with this username already exists",
 				Code:    http.StatusBadRequest,
 			}
-		}
-	}
-
-	if userKeyToFind != "" {
-		err := as.DB.Update(dataToChange, userKeyToFind)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -137,15 +130,25 @@ func (as *APIService) addUserToDB(dataToChange *User, userKeyToFind string) erro
 	return nil
 }
 
-func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) error {
-	users, err := as.FileProvider.ReadUsersFromFile()
+func (as *APIService) updateUserInDB(dataToChange *User, userKeyToFind string) error {
+	existingUser, err := as.DB.GetByUsername(userKeyToFind)
 	if err != nil {
 		return err
 	}
 
-	for i := range users {
-		if users[i].Username == dataToChange.Username &&
-			(dataToChange.Username != userKeyToFind || userKeyToFind == "") {
+	if existingUser == nil || existingUser.Username == "" {
+		return errors2.APIError{
+			Message: fmt.Sprintf("cannot find user by username '%s'", userKeyToFind),
+			Code:    http.StatusNotFound,
+		}
+	}
+
+	if dataToChange.Username != "" && dataToChange.Username != userKeyToFind {
+		existingUser, err := as.DB.GetByUsername(dataToChange.Username)
+		if err != nil {
+			return err
+		}
+		if existingUser != nil {
 			return errors2.APIError{
 				Message: "Another user with this username already exists",
 				Code:    http.StatusBadRequest,
@@ -153,21 +156,70 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 		}
 	}
 
+	err = as.DB.Update(dataToChange, userKeyToFind)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (as *APIService) changeUserInDB(dataToChange *User, userKeyToFind string) error {
 	if userKeyToFind == "" {
-		users = append(users, dataToChange)
-		err = as.FileProvider.SaveUsersToFile(users)
-		if err != nil {
-			return err
+		return as.addUserToDB(dataToChange)
+	}
+	return as.updateUserInDB(dataToChange, userKeyToFind)
+}
+
+func (as *APIService) addUserToFile(dataToChange *User) error {
+	users, err := as.FileProvider.ReadUsersFromFile()
+	if err != nil {
+		return err
+	}
+
+	for i := range users {
+		if users[i].Username == dataToChange.Username {
+			return errors2.APIError{
+				Message: "Another user with this username already exists",
+				Code:    http.StatusBadRequest,
+			}
 		}
-		return nil
+	}
+
+	users = append(users, dataToChange)
+	err = as.FileProvider.SaveUsersToFile(users)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (as *APIService) updateUserInFile(dataToChange *User, userKeyToFind string) error {
+	users, err := as.FileProvider.ReadUsersFromFile()
+	if err != nil {
+		return err
 	}
 
 	userFound := false
 	for i := range users {
-		if users[i].Username != userKeyToFind {
-			continue
+		if users[i].Username == userKeyToFind {
+			userFound = true
 		}
-		userFound = true
+		if dataToChange.Username != "" && users[i].Username == dataToChange.Username && dataToChange.Username != userKeyToFind {
+			return errors2.APIError{
+				Message: "Another user with this username already exists",
+				Code:    http.StatusBadRequest,
+			}
+		}
+	}
+
+	if !userFound {
+		return errors2.APIError{
+			Message: fmt.Sprintf("cannot find user by username '%s'", userKeyToFind),
+			Code:    http.StatusNotFound,
+		}
+	}
+
+	for i := range users {
 		if dataToChange.Password != "" {
 			users[i].Password = dataToChange.Password
 		}
@@ -179,10 +231,6 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 		}
 	}
 
-	if !userFound {
-		return fmt.Errorf("cannot find user by username '%s'", userKeyToFind)
-	}
-
 	err = as.FileProvider.SaveUsersToFile(users)
 	if err != nil {
 		return err
@@ -191,16 +239,40 @@ func (as *APIService) addUserToFile(dataToChange *User, userKeyToFind string) er
 	return nil
 }
 
+func (as *APIService) changeUserInFile(dataToChange *User, userKeyToFind string) error {
+	if userKeyToFind != "" {
+		return as.updateUserInFile(dataToChange, userKeyToFind)
+	}
+
+	return as.addUserToFile(dataToChange)
+}
+
 func (as *APIService) Delete(usernameToDelete string) error {
 	if as.ProviderType == ProviderFromFile {
 		return as.deleteUserFromFile(usernameToDelete)
 	}
 
 	if as.ProviderType == ProviderFromDB {
-		return as.DB.Delete(usernameToDelete)
+		return as.deleteUserFromDB(usernameToDelete)
 	}
 
 	return fmt.Errorf("unknown user data provider type: %d", as.ProviderType)
+}
+
+func (as *APIService) deleteUserFromDB(usernameToDelete string) error {
+	user, err := as.DB.GetByUsername(usernameToDelete)
+	if err != nil {
+		return err
+	}
+
+	if user == nil || user.Username == "" {
+		return errors2.APIError{
+			Message: fmt.Sprintf("cannot find user by username '%s'", usernameToDelete),
+			Code:    http.StatusNotFound,
+		}
+	}
+
+	return as.DB.Delete(usernameToDelete)
 }
 
 func (as *APIService) deleteUserFromFile(usernameToDelete string) error {
@@ -217,7 +289,10 @@ func (as *APIService) deleteUserFromFile(usernameToDelete string) error {
 	}
 
 	if foundIndex < 0 {
-		return fmt.Errorf("unknown user '%s'", usernameToDelete)
+		return errors2.APIError{
+			Message: fmt.Sprintf("cannot find user by username '%s'", usernameToDelete),
+			Code:    http.StatusNotFound,
+		}
 	}
 
 	usersToWriteToFile := append(usersFromFile[:foundIndex], usersFromFile[foundIndex+1:]...)
