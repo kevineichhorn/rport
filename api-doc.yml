@@ -881,7 +881,9 @@ paths:
       tags:
         - "Users"
       summary: "Return all users"
-      description: "Return a list of all existing users sorted by username in asc order"
+      description: "Return a list of all existing users sorted by username in asc order.
+      This API requites the current user to be member of group `Administrators`. Returns 403 otherwise.
+      The `Administrators` group name is hardcoded and cannot be changed at the moment"
       produces:
         - "application/json"
       responses:
@@ -894,6 +896,10 @@ paths:
                 type: "array"
                 items:
                   $ref: "#/definitions/UserGet"
+        "403":
+          description: "current user should belong to Administrators group to access this resource"
+          schema:
+            $ref: "#/definitions/ErrorPayload"
         "500":
           description: "Invalid Operation"
           schema:
@@ -902,7 +908,9 @@ paths:
       tags:
         - "Users"
       summary: "Create a new user"
-      description: "Create a new user."
+      description: "Create a new user.
+      This API requites the current user to be member of group `Administrators`. Returns 403 otherwise.
+      The `Administrators` group name is hardcoded and cannot be changed at the moment"
       produces:
         - "application/json"
       parameters:
@@ -919,6 +927,10 @@ paths:
           description: "Invalid request parameters"
           schema:
             $ref: "#/definitions/ErrorPayload"
+        "403":
+          description: "current user should belong to Administrators group to access this resource"
+          schema:
+            $ref: "#/definitions/ErrorPayload"
         "500":
           description: "Invalid Operation"
           schema:
@@ -928,7 +940,9 @@ paths:
       tags:
         - "Users"
       summary: "Update an user identified by the provided id"
-      description: "Update an existing user"
+      description: "Update an existing user.
+      This API requites the current user to be member of group `Administrators`. Returns 403 otherwise.
+            The `Administrators` group name is hardcoded and cannot be changed at the moment"
       produces:
         - "application/json"
       parameters:
@@ -950,6 +964,10 @@ paths:
           description: "Invalid request parameters"
           schema:
             $ref: "#/definitions/ErrorPayload"
+        "403":
+          description: "current user should belong to Administrators group to access this resource"
+          schema:
+            $ref: "#/definitions/ErrorPayload"
         "500":
           description: "Invalid Operation"
           schema:
@@ -958,7 +976,9 @@ paths:
       tags:
         - "Users"
       summary: "Delete an user"
-      description: "Delete an client by a given id"
+      description: "Delete an client by a given id.
+      This API requites the current user to be member of group `Administrators`. Returns 403 otherwise.
+            The `Administrators` group name is hardcoded and cannot be changed at the moment"
       produces:
         - "application/json"
       parameters:
@@ -970,6 +990,10 @@ paths:
       responses:
         "204":
           description: "Successful Operation"
+        "403":
+          description: "current user should belong to Administrators group to access this resource"
+          schema:
+            $ref: "#/definitions/ErrorPayload"
         "500":
           description: "Invalid Operation"
           schema:
@@ -1328,7 +1352,7 @@ definitions:
         type: "string"
       title:
         type: "string"
-      detial:
+      detail:
         type: "string"
   ExecuteCmdRequest:
     description: "Request that contains a remote command to execute by rport client(s) and other related properties"
